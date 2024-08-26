@@ -1,39 +1,58 @@
 #!/usr/bin/env python3
 """
-Unit tests for GithubOrgClient class.
+Integration tests for GithubOrgClient class.
 """
 
 import unittest
 from unittest.mock import patch
-from parameterized import parameterized
+from parameterized import parameterized_class
 from client import GithubOrgClient
+from fixtures import org_payload, repos_payload, expected_repos, apache2_repos
 
 
-class TestGithubOrgClient(unittest.TestCase):
+@parameterized_class([
+    {"org_payload": org_payload, "repos_payload": repos_payload,
+     "expected_repos": expected_repos, "apache2_repos": apache2_repos},
+])
+class TestIntegrationGithubOrgClient(unittest.TestCase):
     """
-    Test cases for the GithubOrgClient class.
+    Integration tests for the GithubOrgClient class.
     """
 
-    @parameterized.expand([
-        ("google",),
-        ("abc",),
-    ])
-    @patch('client.GithubOrgClient.get_json')
-    def test_org(self, org_name, mock_get_json):
+    @classmethod
+    def setUpClass(cls):
         """
-        Test that GithubOrgClient.org returns the correct organization data.
+        Set up class-level fixtures.
         """
-        # Set up the mock to return a dummy value
-        mock_get_json.return_value = {"name": org_name}
+        cls.get_patcher = patch('client.requests.get')
+        cls.mock_get = cls.get_patcher.start()
+        cls.mock_get.side_effect = [
+            cls.org_payload, cls.repos_payload, cls.apache2_repos
+        ]
 
-        # Create an instance of GithubOrgClient
-        client = GithubOrgClient(org_name)
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Tear down class-level fixtures.
+        """
+        cls.get_patcher.stop()
 
-        # Call the org method and check the return value
-        result = client.org()
-        expected_url = f"https://api.github.com/orgs/{org_name}"
-        mock_get_json.assert_called_once_with(expected_url)
-        self.assertEqual(result, {"name": org_name})
+    def test_public_repos(self):
+        """
+        Test the public_repos method.
+        """
+        client = GithubOrgClient("google")
+        self.assertEqual(client.public_repos(), self.expected_repos)
+
+    def test_public_repos_with_license(self):
+        """
+        Test the public_repos method with license filter.
+        """
+        client = GithubOrgClient("google")
+        self.assertEqual(
+            client.public_repos(license="apache-2.0"),
+            self.apache2_repos
+        )
 
 
 if __name__ == "__main__":
